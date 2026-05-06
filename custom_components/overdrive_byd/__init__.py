@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
@@ -9,6 +11,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {
         "data": {},
         "listeners": [],
+        "last_seen": None,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
