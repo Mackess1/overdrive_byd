@@ -2,7 +2,15 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 
-from .const import DOMAIN, CONF_TOPIC, CONF_NAME, DEFAULT_TOPIC, DEFAULT_NAME
+from .const import (
+    DOMAIN,
+    CONF_TOPIC,
+    CONF_COMMAND_TOPIC,
+    CONF_NAME,
+    DEFAULT_TOPIC,
+    DEFAULT_COMMAND_TOPIC,
+    DEFAULT_NAME,
+)
 
 
 class OverdriveBYDConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -24,6 +32,7 @@ class OverdriveBYDConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             {
                 vol.Required(CONF_NAME, default=DEFAULT_NAME): str,
                 vol.Required(CONF_TOPIC, default=DEFAULT_TOPIC): str,
+                vol.Required(CONF_COMMAND_TOPIC, default=DEFAULT_COMMAND_TOPIC): str,
             }
         )
 
