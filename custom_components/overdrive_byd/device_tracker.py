@@ -1,8 +1,8 @@
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import DeviceInfo
 
-from .const import DOMAIN, CONF_NAME
+from .const import CONF_NAME, DOMAIN
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -17,6 +17,7 @@ class OverdriveBYDTracker(TrackerEntity):
         self.entry = entry
         self.vehicle_name = vehicle_name
         self.signal = signal
+
         self._attr_name = f"{vehicle_name} Location"
         self._attr_unique_id = f"{entry.entry_id}_location"
 
