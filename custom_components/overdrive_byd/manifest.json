@@ -1,11 +1,15 @@
 {
   "domain": "overdrive_byd",
   "name": "Overdrive BYD MQTT",
-  "version": "1.0.0",
-  "documentation": "https://github.com/YOUR_USERNAME/overdrive_byd",
-  "issue_tracker": "https://github.com/YOUR_USERNAME/overdrive_byd/issues",
-  "codeowners": ["@YOUR_USERNAME"],
-  "dependencies": ["mqtt"],
+  "version": "1.1.0",
+  "documentation": "https://github.com/Mackess1/overdrive_byd",
+  "issue_tracker": "https://github.com/Mackess1/overdrive_byd/issues",
+  "codeowners": [
+    "@Mackess1"
+  ],
+  "dependencies": [
+    "mqtt"
+  ],
   "config_flow": true,
   "iot_class": "local_push"
 }
