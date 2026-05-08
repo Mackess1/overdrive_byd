@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
@@ -24,6 +22,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         for unsub in hass.data[DOMAIN][entry.entry_id].get("listeners", []):
             unsub()
+
         hass.data[DOMAIN].pop(entry.entry_id)
 
     return unload_ok
