@@ -3,26 +3,23 @@ import logging
 from datetime import datetime, timezone
 
 from homeassistant.components import mqtt
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
-from homeassistant.const import UnitOfTemperature, UnitOfLength, PERCENTAGE
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfTemperature
+from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
-from homeassistant.helpers.dispatcher import async_dispatcher_send, async_dispatcher_connect
 
-from .const import DOMAIN, CONF_TOPIC, CONF_NAME
+from .const import CONF_NAME, CONF_TOPIC, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-
 
 SENSORS = [
     ("utc", "Last Update", None, None, EntityCategory.DIAGNOSTIC),
     ("soc", "Battery Percentage", PERCENTAGE, SensorDeviceClass.BATTERY, None),
     ("power", "Power", "kW", SensorDeviceClass.POWER, None),
     ("speed", "Speed", "km/h", None, None),
-
     ("lat", "Latitude", None, None, EntityCategory.DIAGNOSTIC),
     ("lon", "Longitude", None, None, EntityCategory.DIAGNOSTIC),
     ("elevation", "Elevation", UnitOfLength.METERS, None, EntityCategory.DIAGNOSTIC),
-
     ("ext_temp", "Outside Temperature", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE, None),
     ("batt_temp", "Battery Temperature", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE, None),
     ("odometer", "Odometer", UnitOfLength.KILOMETERS, SensorDeviceClass.DISTANCE, None),
@@ -49,6 +46,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
         hass.data[DOMAIN][entry.entry_id]["data"] = payload
         hass.data[DOMAIN][entry.entry_id]["last_seen"] = datetime.now(timezone.utc)
+
         async_dispatcher_send(hass, signal)
 
     unsub = await mqtt.async_subscribe(hass, topic, message_received, 0)
@@ -68,6 +66,7 @@ class OverdriveBYDSensor(SensorEntity):
         self.vehicle_name = vehicle_name
         self.signal = signal
         self.key = key
+
         self._attr_name = f"{vehicle_name} {label}"
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         self._attr_native_unit_of_measurement = unit
