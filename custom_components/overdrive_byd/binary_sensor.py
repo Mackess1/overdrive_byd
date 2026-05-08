@@ -1,11 +1,10 @@
 from datetime import datetime, timezone
 
-from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
-from homeassistant.helpers.entity import DeviceInfo, EntityCategory
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 
-from .const import DOMAIN, CONF_NAME
-
+from .const import CONF_NAME, DOMAIN
 
 BINARY_SENSORS = [
     ("is_charging", "Charging", BinarySensorDeviceClass.BATTERY_CHARGING, None),
@@ -35,6 +34,7 @@ class OverdriveBYDBinarySensor(BinarySensorEntity):
         self.vehicle_name = vehicle_name
         self.signal = signal
         self.key = key
+
         self._attr_name = f"{vehicle_name} {label}"
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         self._attr_device_class = device_class
@@ -69,6 +69,7 @@ class OverdriveBYDOnlineSensor(BinarySensorEntity):
         self.entry = entry
         self.vehicle_name = vehicle_name
         self.signal = signal
+
         self._attr_name = f"{vehicle_name} Online"
         self._attr_unique_id = f"{entry.entry_id}_online"
         self._attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
