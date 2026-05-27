@@ -1,2 +1,3 @@
-# overdrive_byd
-Home Assistant integration for BYD / Overdrive MQTT vehicle telemetry with battery, GPS, charging, range, and sensor entities.
+# Overdrive BYD MQTT with Commands
+
+Updated custom integration adding command entities for Overdrive MQTT control.

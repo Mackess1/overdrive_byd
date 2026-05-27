@@ -1,5 +1,8 @@
 {
   "name": "Overdrive BYD MQTT",
-  "domains": ["overdrive_byd"],
+  "render_readme": true,
+  "domains": [
+    "overdrive_byd"
+  ],
   "homeassistant": "2024.1.0"
 }
