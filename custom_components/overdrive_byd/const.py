@@ -1,19 +1,18 @@
 DOMAIN = "overdrive_byd"
 
-CONF_TOPIC = "topic"
-CONF_COMMAND_TOPIC = "command_topic"
-CONF_NAME = "name"
+DEFAULT_NAME = "BYD Vehicle"
+DEFAULT_TELEMETRY_TOPIC = "overdrive/vehicle/telemetry"
+DEFAULT_AVAILABILITY_TOPIC = "overdrive/vehicle/telemetry/availability"
 
-DEFAULT_TOPIC = "overdrive/vehicle/telemetry"
-DEFAULT_COMMAND_TOPIC = "overdrive/vehicle/command"
-DEFAULT_NAME = "BYD Car"
+CONF_TELEMETRY_TOPIC = "telemetry_topic"
+CONF_AVAILABILITY_TOPIC = "availability_topic"
 
-PLATFORMS = [
-    "sensor",
-    "binary_sensor",
-    "device_tracker",
-    "button",
-    "lock",
-    "climate",
-    "cover",
-]
+PLATFORMS = ["sensor", "binary_sensor", "device_tracker"]
+
+INVALID_VALUES = {
+    65535,
+    1048575,
+    104857.5,
+    -10011,
+    -2147482648,
+}
