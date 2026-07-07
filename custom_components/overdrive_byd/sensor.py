@@ -1,248 +1,327 @@
-import json
-import logging
-from datetime import datetime, timezone
+from __future__ import annotations
 
-from homeassistant.components import mqtt
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
-from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfTemperature
-from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
-from homeassistant.helpers.entity import DeviceInfo, EntityCategory
+from dataclasses import dataclass
 
-from .const import CONF_NAME, CONF_TOPIC, DOMAIN
+from homeassistant.components.sensor import (
+    SensorEntity,
+    SensorEntityDescription,
+    SensorDeviceClass,
+    SensorStateClass,
+)
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfTemperature,
+    UnitOfElectricPotential,
+    UnitOfPressure,
+    UnitOfSpeed,
+    UnitOfLength,
+    UnitOfEnergy,
+    UnitOfPower,
+)
 
-_LOGGER = logging.getLogger(__name__)
-
-INVALID_VALUES = {
-    -10011,
-    -2147482648,
-    -2147482647,
-    1048575,
-    104857.5,
-    65535,
-}
+from .const import DOMAIN
+from .entity import OverdriveBYDEntity, clean_value, get_array_value
 
 
-# key, label, unit, device_class, entity_category, array_index
-SENSORS = [
-    # Core vehicle data
-    ("utc", "Last Update", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("vd_timestamp", "Vehicle Data Timestamp", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("soc", "Battery Percentage", PERCENTAGE, SensorDeviceClass.BATTERY, None, None),
-    ("power", "Power", "kW", SensorDeviceClass.POWER, None, None),
-    ("speed", "Speed", "km/h", None, None, None),
-    ("gear", "Gear", None, None, None, None),
-    ("lat", "Latitude", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("lon", "Longitude", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("elevation", "Elevation", UnitOfLength.METERS, None, EntityCategory.DIAGNOSTIC, None),
-    ("odometer", "Odometer", UnitOfLength.KILOMETERS, SensorDeviceClass.DISTANCE, None, None),
-    ("ev_range_km", "EV Range", UnitOfLength.KILOMETERS, SensorDeviceClass.DISTANCE, None, None),
-    ("consumption_50km", "Consumption 50km", "kWh/100km", None, None, None),
-    ("driving_time_hours", "Driving Time", "h", None, EntityCategory.DIAGNOSTIC, None),
-    ("vin", "VIN", None, None, EntityCategory.DIAGNOSTIC, None),
+@dataclass(frozen=True)
+class OverdriveBYDSensorEntityDescription(SensorEntityDescription):
+    array_key: str | None = None
+    array_index: int | None = None
 
-    # Temperatures and battery health
-    ("ext_temp", "Outside Temperature", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE, None, None),
-    ("inside_temp", "Inside Temperature", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE, None, None),
-    ("batt_temp", "Battery Temperature", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE, None, None),
-    ("cell_t_max", "Cell Temperature Max", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE, EntityCategory.DIAGNOSTIC, None),
-    ("cell_t_min", "Cell Temperature Min", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE, EntityCategory.DIAGNOSTIC, None),
-    ("cell_t_avg", "Cell Temperature Average", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE, EntityCategory.DIAGNOSTIC, None),
-    ("cell_t_delta", "Cell Temperature Delta", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE, EntityCategory.DIAGNOSTIC, None),
-    ("soh", "Battery Health", PERCENTAGE, None, EntityCategory.DIAGNOSTIC, None),
-    ("capacity", "Battery Capacity", "kWh", None, EntityCategory.DIAGNOSTIC, None),
-    ("hv_pack_v", "HV Pack Voltage", "V", SensorDeviceClass.VOLTAGE, EntityCategory.DIAGNOSTIC, None),
-    ("cell_v_max", "Cell Voltage Max", "V", SensorDeviceClass.VOLTAGE, EntityCategory.DIAGNOSTIC, None),
-    ("cell_v_min", "Cell Voltage Min", "V", SensorDeviceClass.VOLTAGE, EntityCategory.DIAGNOSTIC, None),
-    ("cell_v_delta", "Cell Voltage Delta", "V", SensorDeviceClass.VOLTAGE, EntityCategory.DIAGNOSTIC, None),
-    ("volt_12v", "12V Battery Voltage", "V", SensorDeviceClass.VOLTAGE, EntityCategory.DIAGNOSTIC, None),
-    ("batt_12v_level", "12V Battery Level", None, None, EntityCategory.DIAGNOSTIC, None),
 
-    # Driving controls and modes
-    ("accel_pct", "Accelerator", PERCENTAGE, None, EntityCategory.DIAGNOSTIC, None),
-    ("brake_pct", "Brake", PERCENTAGE, None, EntityCategory.DIAGNOSTIC, None),
-    ("steering_deg", "Steering Angle", "°", None, EntityCategory.DIAGNOSTIC, None),
-    ("energy_mode", "Energy Mode", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("op_mode", "Operation Mode", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("power_level", "Power Level", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("mcu_status", "MCU Status", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("drift_mode", "Drift Mode", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("speed_limit_warning", "Speed Limit Warning", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("key_start_state", "Key Start State", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("key_detection_reminder", "Key Detection Reminder", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("smart_key_warn", "Smart Key Warning", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("key_bt_low_power", "Key Bluetooth Low Power", None, None, EntityCategory.DIAGNOSTIC, None),
+SENSORS: tuple[OverdriveBYDSensorEntityDescription, ...] = (
+    OverdriveBYDSensorEntityDescription(
+        key="soc",
+        name="Battery Percentage",
+        native_unit_of_measurement=PERCENTAGE,
+        device_class=SensorDeviceClass.BATTERY,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="power",
+        name="Power",
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="speed",
+        name="Speed",
+        native_unit_of_measurement=UnitOfSpeed.KILOMETERS_PER_HOUR,
+        device_class=SensorDeviceClass.SPEED,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="elevation",
+        name="Elevation",
+        native_unit_of_measurement=UnitOfLength.METERS,
+        device_class=SensorDeviceClass.DISTANCE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="ev_range_km",
+        name="EV Range",
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        device_class=SensorDeviceClass.DISTANCE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="odometer",
+        name="Odometer",
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        device_class=SensorDeviceClass.DISTANCE,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="ext_temp",
+        name="Outside Temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="inside_temp",
+        name="Inside Temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="batt_temp",
+        name="Battery Temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="soh",
+        name="Battery Health",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="capacity",
+        name="Battery Capacity",
+        native_unit_of_measurement="kWh",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="hv_pack_v",
+        name="HV Pack Voltage",
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="volt_12v",
+        name="12V Battery Voltage",
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="cell_v_max",
+        name="Max Cell Voltage",
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="cell_v_min",
+        name="Min Cell Voltage",
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="cell_v_delta",
+        name="Cell Voltage Delta",
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="cell_t_max",
+        name="Max Cell Temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="cell_t_min",
+        name="Min Cell Temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="cell_t_avg",
+        name="Average Cell Temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="cell_t_delta",
+        name="Cell Temperature Delta",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(key="gear", name="Gear"),
+    OverdriveBYDSensorEntityDescription(key="vin", name="VIN"),
+    OverdriveBYDSensorEntityDescription(
+        key="consumption_50km",
+        name="Consumption Last 50km",
+        native_unit_of_measurement="kWh/100km",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="driving_time_hours",
+        name="Driving Time",
+        native_unit_of_measurement="h",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="total_elec_con",
+        name="Total Electric Consumption",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="accel_pct",
+        name="Accelerator Pedal",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="brake_pct",
+        name="Brake Pedal",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="steering_deg",
+        name="Steering Angle",
+        native_unit_of_measurement="°",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="tyre_p_fl",
+        name="Front Left Tyre Pressure",
+        native_unit_of_measurement=UnitOfPressure.KPA,
+        device_class=SensorDeviceClass.PRESSURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="tyre_p_fr",
+        name="Front Right Tyre Pressure",
+        native_unit_of_measurement=UnitOfPressure.KPA,
+        device_class=SensorDeviceClass.PRESSURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="tyre_p_rl",
+        name="Rear Left Tyre Pressure",
+        native_unit_of_measurement=UnitOfPressure.KPA,
+        device_class=SensorDeviceClass.PRESSURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="tyre_p_rr",
+        name="Rear Right Tyre Pressure",
+        native_unit_of_measurement=UnitOfPressure.KPA,
+        device_class=SensorDeviceClass.PRESSURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="tyre_t_fl",
+        name="Front Left Tyre Temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="tyre_t_fr",
+        name="Front Right Tyre Temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="tyre_t_rl",
+        name="Rear Left Tyre Temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(
+        key="tyre_t_rr",
+        name="Rear Right Tyre Temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    OverdriveBYDSensorEntityDescription(key="charging_state", name="Charging State"),
+    OverdriveBYDSensorEntityDescription(key="charger_state", name="Charger State"),
+    OverdriveBYDSensorEntityDescription(key="charging_mode", name="Charging Mode"),
+    OverdriveBYDSensorEntityDescription(key="charging_gun", name="Charging Gun"),
+    OverdriveBYDSensorEntityDescription(key="charging_type", name="Charging Type"),
+    OverdriveBYDSensorEntityDescription(key="charging_v2l", name="V2L Charging"),
+    OverdriveBYDSensorEntityDescription(key="ac_fan", name="AC Fan"),
+    OverdriveBYDSensorEntityDescription(key="ac_cycle", name="AC Cycle"),
+    OverdriveBYDSensorEntityDescription(key="ac_wind", name="AC Wind Mode"),
+    OverdriveBYDSensorEntityDescription(key="sunroof_state", name="Sunroof State"),
+    OverdriveBYDSensorEntityDescription(key="sunroof_pos", name="Sunroof Position"),
+    OverdriveBYDSensorEntityDescription(key="power_level", name="Power Level"),
+    OverdriveBYDSensorEntityDescription(key="mcu_status", name="MCU Status"),
+    OverdriveBYDSensorEntityDescription(key="energy_mode", name="Energy Mode"),
+    OverdriveBYDSensorEntityDescription(key="op_mode", name="Operation Mode"),
+    OverdriveBYDSensorEntityDescription(key="key_start_state", name="Key Start State"),
+    OverdriveBYDSensorEntityDescription(key="key_detection_reminder", name="Key Detection Reminder"),
+    OverdriveBYDSensorEntityDescription(key="smart_key_warn", name="Smart Key Warning"),
+    OverdriveBYDSensorEntityDescription(key="vd_timestamp", name="Vehicle Data Timestamp"),
+    OverdriveBYDSensorEntityDescription(key="utc", name="Telemetry UTC"),
+)
 
-    # Charging
-    ("charging_state", "Charging State", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("charger_state", "Charger State", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("charging_mode", "Charging Mode", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("charging_type", "Charging Type", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("charging_v2l", "V2L State", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("wireless_charging_left", "Wireless Charging Left", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("wireless_charging_right", "Wireless Charging Right", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("wireless_charging_status", "Wireless Charging Status", None, None, EntityCategory.DIAGNOSTIC, None),
 
-    # Lifetime counters
-    ("total_elec_con", "Total Electric Consumption", "kWh", None, EntityCategory.DIAGNOSTIC, None),
-    ("total_fuel_con", "Total Fuel Consumption", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("ev_mileage_km", "EV Mileage", UnitOfLength.KILOMETERS, SensorDeviceClass.DISTANCE, EntityCategory.DIAGNOSTIC, None),
-
-    # Climate
-    ("ac_cycle", "AC Cycle", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("ac_wind", "AC Wind", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("ac_fan", "AC Fan", None, None, None, None),
-    ("temp_unit", "Temperature Unit", None, None, EntityCategory.DIAGNOSTIC, None),
-
-    # Tyres
-    ("tyre_p_fl", "Tyre Pressure Front Left", "kPa", SensorDeviceClass.PRESSURE, None, None),
-    ("tyre_p_fr", "Tyre Pressure Front Right", "kPa", SensorDeviceClass.PRESSURE, None, None),
-    ("tyre_p_rl", "Tyre Pressure Rear Left", "kPa", SensorDeviceClass.PRESSURE, None, None),
-    ("tyre_p_rr", "Tyre Pressure Rear Right", "kPa", SensorDeviceClass.PRESSURE, None, None),
-    ("tyre_t_fl", "Tyre Temperature Front Left", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE, None, None),
-    ("tyre_t_fr", "Tyre Temperature Front Right", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE, None, None),
-    ("tyre_t_rl", "Tyre Temperature Rear Left", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE, None, None),
-    ("tyre_t_rr", "Tyre Temperature Rear Right", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE, None, None),
-    ("tyre_p_state_fl", "Tyre Pressure State Front Left", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("tyre_p_state_fr", "Tyre Pressure State Front Right", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("tyre_p_state_rl", "Tyre Pressure State Rear Left", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("tyre_p_state_rr", "Tyre Pressure State Rear Right", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("tyre_system_state", "Tyre System State", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("tyre_temp_state", "Tyre Temperature State", None, None, EntityCategory.DIAGNOSTIC, None),
-
-    # Doors, seatbelt, seat heating/cooling, sunroof
-    ("door_lock", "Door Lock 1 Raw", None, None, EntityCategory.DIAGNOSTIC, 0),
-    ("door_lock", "Door Lock 2 Raw", None, None, EntityCategory.DIAGNOSTIC, 1),
-    ("door_lock", "Door Lock 3 Raw", None, None, EntityCategory.DIAGNOSTIC, 2),
-    ("door_lock", "Door Lock 4 Raw", None, None, EntityCategory.DIAGNOSTIC, 3),
-    ("door_lock", "Door Lock 5 Raw", None, None, EntityCategory.DIAGNOSTIC, 4),
-    ("door_lock", "Door Lock 6 Raw", None, None, EntityCategory.DIAGNOSTIC, 5),
-    ("door_lock", "Door Lock 7 Raw", None, None, EntityCategory.DIAGNOSTIC, 6),
-    ("seatbelt", "Seatbelt 1 Raw", None, None, EntityCategory.DIAGNOSTIC, 0),
-    ("seatbelt", "Seatbelt 2 Raw", None, None, EntityCategory.DIAGNOSTIC, 1),
-    ("seatbelt", "Seatbelt 3 Raw", None, None, EntityCategory.DIAGNOSTIC, 2),
-    ("seatbelt", "Seatbelt 4 Raw", None, None, EntityCategory.DIAGNOSTIC, 3),
-    ("seatbelt", "Seatbelt 5 Raw", None, None, EntityCategory.DIAGNOSTIC, 4),
-    ("seat_heat", "Seat Heat Driver", None, None, None, 0),
-    ("seat_heat", "Seat Heat Passenger", None, None, None, 1),
-    ("seat_cool", "Seat Cool Driver", None, None, None, 0),
-    ("seat_cool", "Seat Cool Passenger", None, None, None, 1),
-    ("sunroof_state", "Sunroof State", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("sunroof_pos", "Sunroof Position", None, None, None, None),
-
-    # Lights and misc engine/status values
-    ("light_left_turn", "Left Turn Light Raw", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("light_right_turn", "Right Turn Light Raw", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("engine_coolant_level", "Engine Coolant Level", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("oil_level", "Oil Level", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("engine_code", "Engine Code", None, None, EntityCategory.DIAGNOSTIC, None),
-    ("emergency_alarm", "Emergency Alarm", None, None, EntityCategory.DIAGNOSTIC, None),
-
-    # Radar distances
-    ("radar_distances", "Radar Distance 1", "cm", None, EntityCategory.DIAGNOSTIC, 0),
-    ("radar_distances", "Radar Distance 2", "cm", None, EntityCategory.DIAGNOSTIC, 1),
-    ("radar_distances", "Radar Distance 3", "cm", None, EntityCategory.DIAGNOSTIC, 2),
-    ("radar_distances", "Radar Distance 4", "cm", None, EntityCategory.DIAGNOSTIC, 3),
-    ("radar_distances", "Radar Distance 5", "cm", None, EntityCategory.DIAGNOSTIC, 4),
-    ("radar_distances", "Radar Distance 6", "cm", None, EntityCategory.DIAGNOSTIC, 5),
-    ("radar_distances", "Radar Distance 7", "cm", None, EntityCategory.DIAGNOSTIC, 6),
-    ("radar_distances", "Radar Distance 8", "cm", None, EntityCategory.DIAGNOSTIC, 7),
-    ("radar_distances", "Radar Distance 9", "cm", None, EntityCategory.DIAGNOSTIC, 8),
-]
+ARRAY_SENSORS: tuple[OverdriveBYDSensorEntityDescription, ...] = (
+    OverdriveBYDSensorEntityDescription(key="radar_front_left", name="Radar Front Left", array_key="radar_distances", array_index=0),
+    OverdriveBYDSensorEntityDescription(key="radar_front_mid_left", name="Radar Front Mid Left", array_key="radar_distances", array_index=1),
+    OverdriveBYDSensorEntityDescription(key="radar_front_mid_right", name="Radar Front Mid Right", array_key="radar_distances", array_index=2),
+    OverdriveBYDSensorEntityDescription(key="radar_front_right", name="Radar Front Right", array_key="radar_distances", array_index=3),
+    OverdriveBYDSensorEntityDescription(key="radar_rear_left", name="Radar Rear Left", array_key="radar_distances", array_index=4),
+    OverdriveBYDSensorEntityDescription(key="radar_rear_mid_left", name="Radar Rear Mid Left", array_key="radar_distances", array_index=5),
+    OverdriveBYDSensorEntityDescription(key="radar_rear_mid_right", name="Radar Rear Mid Right", array_key="radar_distances", array_index=6),
+    OverdriveBYDSensorEntityDescription(key="radar_rear_right", name="Radar Rear Right", array_key="radar_distances", array_index=7),
+)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    topic = entry.data[CONF_TOPIC]
-    name = entry.data[CONF_NAME]
-    signal = f"{DOMAIN}_{entry.entry_id}_update"
+    coordinator = hass.data[DOMAIN][entry.entry_id]
 
-    async def message_received(msg):
-        try:
-            payload = json.loads(msg.payload)
-        except Exception:
-            _LOGGER.warning("Invalid Overdrive JSON payload: %s", msg.payload)
-            return
+    entities = [OverdriveBYDSensor(coordinator, description) for description in SENSORS]
+    entities += [OverdriveBYDSensor(coordinator, description) for description in ARRAY_SENSORS]
 
-        hass.data[DOMAIN][entry.entry_id]["data"] = payload
-        hass.data[DOMAIN][entry.entry_id]["last_seen"] = datetime.now(timezone.utc)
-
-        async_dispatcher_send(hass, signal)
-
-    unsub = await mqtt.async_subscribe(hass, topic, message_received, 0)
-    hass.data[DOMAIN][entry.entry_id]["listeners"].append(unsub)
-
-    async_add_entities(
-        [
-            OverdriveBYDSensor(entry, name, signal, key, label, unit, device_class, entity_category, index)
-            for key, label, unit, device_class, entity_category, index in SENSORS
-        ]
-    )
+    async_add_entities(entities)
 
 
-class OverdriveBYDSensor(SensorEntity):
-    def __init__(self, entry, vehicle_name, signal, key, label, unit, device_class, entity_category, index=None):
-        self.entry = entry
-        self.vehicle_name = vehicle_name
-        self.signal = signal
-        self.key = key
-        self.index = index
+class OverdriveBYDSensor(OverdriveBYDEntity, SensorEntity):
+    def __init__(self, coordinator, description: OverdriveBYDSensorEntityDescription) -> None:
+        super().__init__(coordinator, description)
 
-        suffix = f"_{index}" if index is not None else ""
-        self._attr_name = f"{vehicle_name} {label}"
-        self._attr_unique_id = f"{entry.entry_id}_{key}{suffix}"
-        self._attr_native_unit_of_measurement = unit
-        self._attr_device_class = device_class
-        self._attr_entity_category = entity_category
-
-    @property
-    def device_info(self):
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.entry.entry_id)},
-            name=self.vehicle_name,
-            manufacturer="BYD",
-            model="Overdrive MQTT Vehicle",
-        )
+        self._attr_unique_id = f"overdrive_byd_{description.key}"
 
     @property
     def native_value(self):
-        data = self.hass.data[DOMAIN][self.entry.entry_id]["data"]
-        value = data.get(self.key)
+        description = self.entity_description
 
-        if self.index is not None:
-            if not isinstance(value, list) or len(value) <= self.index:
-                return None
-            value = value[self.index]
-
-        if value in INVALID_VALUES:
-            return None
-
-        if self.key in ("utc", "vd_timestamp") and value:
-            try:
-                return datetime.fromtimestamp(value, timezone.utc).strftime("%Y-%m-%d %I:%M:%S %p")
-            except Exception:
-                return value
-
-        if isinstance(value, float):
-            return round(value, 3)
-
-        return value
-
-    @property
-    def extra_state_attributes(self):
-        data = self.hass.data[DOMAIN][self.entry.entry_id]["data"]
-
-        if self.key == "vin":
-            return None
-
-        if self.index is None and isinstance(data.get(self.key), list):
-            return {"raw": data.get(self.key)}
-
-        return None
-
-    async def async_added_to_hass(self):
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                self.signal,
-                self.async_write_ha_state,
+        if description.array_key is not None and description.array_index is not None:
+            return get_array_value(
+                self.coordinator.data,
+                description.array_key,
+                description.array_index,
             )
-        )
+
+        return clean_value(self.coordinator.data.get(description.key))
