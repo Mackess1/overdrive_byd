@@ -1,0 +1,10 @@
+Overdrive BYD 1.0.1 MQTT fix
+
+- Supports legacy JSON payload on overdrive/vehicle/telemetry.
+- Supports current per-key topics on overdrive/vehicle/telemetry/+.
+- Ignores the availability subtopic in telemetry parsing.
+- Accepts JSON numbers, arrays/objects and plain-string MQTT payloads.
+- Converts location {latitude, longitude} to lat/lon for device_tracker.
+- Uses ev_mileage_km as an odometer fallback only when no odometer exists;
+  BYD placeholder values remain unavailable through the existing sentinel filter.
+- Fixes clean_value() so list/dict telemetry cannot raise TypeError.

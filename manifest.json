@@ -1,0 +1,15 @@
+{
+  "domain": "overdrive_byd",
+  "name": "Overdrive BYD",
+  "codeowners": [
+    "@Mackess1"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "mqtt"
+  ],
+  "documentation": "https://github.com/Mackess1/overdrive_byd",
+  "iot_class": "local_push",
+  "requirements": [],
+  "version": "1.0.1"
+}
